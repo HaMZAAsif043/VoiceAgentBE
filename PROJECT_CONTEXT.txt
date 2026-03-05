@@ -1,0 +1,693 @@
+===========================================
+KFC API PROJECT - COMPLETE CONTEXT
+===========================================
+Last Updated: 2026-02-16
+Project Path: c:\Users\MADIHA\Desktop\BlenSpark Re\kfc_api
+
+===========================================
+1. PROJECT OVERVIEW
+===========================================
+
+This is a Django REST API backend for a KFC ordering system with integrated ElevenLabs voice AI capabilities.
+The project enables customers to order food through voice calls (phone or browser-based) using conversational AI.
+
+Key Technologies:
+- Django 5.2.11
+- Django REST Framework
+- ElevenLabs Conversational AI SDK
+- SQLite Database
+- CORS enabled for frontend integration
+
+===========================================
+2. PROJECT STRUCTURE
+===========================================
+
+kfc_api/                          # Main Django project directory
+├── kfc_api/                      # Project configuration
+│   ├── __init__.py
+│   ├── settings.py               # Django settings with ElevenLabs config
+│   ├── urls.py                   # Main URL routing
+│   ├── wsgi.py                   # WSGI config
+│   └── asgi.py                   # ASGI config
+│
+├── menu/                         # Main application (menu & orders)
+│   ├── __init__.py
+│   ├── admin.py                  # Django admin registration
+│   ├── apps.py                   # App configuration
+│   ├── serializers.py            # DRF serializers
+│   ├── urls.py                   # App URL routing
+│   ├── views.py                  # API views/endpoints
+│   ├── tests.py                  # Unit tests
+│   │
+│   ├── models/                   # Database models
+│   │   ├── __init__.py
+│   │   ├── Call.py              # Call tracking model
+│   │   └── Order.py             # Order model
+│   │
+│   ├── services/                 # Service layer
+│   │   ├── __init__.py
+│   │   └── elevenlabs_service.py # ElevenLabs API integration
+│   │
+│   └── migrations/               # Database migrations
+│       ├── __init__.py
+│       └── 0001_initial.py
+│
+├── .env                          # Environment variables (API keys)
+├── db.sqlite3                    # SQLite database
+├── manage.py                     # Django management script
+├── requirements.txt              # Python dependencies
+└── venv/                         # Virtual environment (ignored)
+
+===========================================
+3. DATABASE MODELS
+===========================================
+
+-------------------------------------------
+3.1 Order Model (menu/models/Order.py)
+-------------------------------------------
+
+Fields:
+- id: BigAutoField (Primary Key)
+- customer_name: CharField(max_length=200)
+- phone_number: CharField(max_length=50)
+- address: TextField
+- landmark: CharField(max_length=255, optional)
+- items: JSONField (stores list of ordered items)
+- total_price: IntegerField
+- created_at: DateTimeField (auto_now_add=True)
+
+Relationships:
+- One-to-Many with Call model (reverse relation: order.calls.all())
+
+String Representation:
+"Order #{id} - {customer_name}"
+
+-------------------------------------------
+3.2 Call Model (menu/models/Call.py)
+-------------------------------------------
+
+Fields:
+- id: BigAutoField (Primary Key)
+- order: ForeignKey(Order, optional, on_delete=CASCADE)
+- phone_number: CharField(max_length=50)
+- call_type: CharField (choices: 'outbound', 'inbound', 'browser')
+- conversation_id: CharField(max_length=255, unique=True)
+- status: CharField (choices: 'initiated', 'ongoing', 'completed', 'failed')
+- transcript: TextField (optional)
+- duration_seconds: IntegerField (optional)
+- metadata: JSONField (default={})
+- created_at: DateTimeField (auto_now_add=True)
+- updated_at: DateTimeField (auto_now=True)
+
+Call Types:
+- 'outbound': Outbound Phone Call (initiated by system)
+- 'inbound': Inbound Phone Call (customer calls in)
+- 'browser': Browser Voice Chat (web-based conversation)
+
+Call Status Flow:
+- 'initiated' → 'ongoing' → 'completed' OR 'failed'
+
+Relationships:
+- Many-to-One with Order (optional)
+
+Meta:
+- ordering: ['-created_at'] (newest first)
+
+String Representation:
+"Call {conversation_id} - {call_type} ({status})"
+
+===========================================
+4. API ENDPOINTS
+===========================================
+
+Base URL: http://localhost:8000/
+
+-------------------------------------------
+4.1 Menu Endpoints
+-------------------------------------------
+
+GET /menu/
+Description: Retrieve the KFC menu items
+Response: {
+  "success": true,
+  "menu": [
+    {
+      "id": 1,
+      "name": "Zinger Burger",
+      "category": "Burgers",
+      "price": 650,
+      "description": "Crispy chicken fillet with spicy mayo",
+      "image": "/images/zinger.jpg"
+    },
+    ... 8 total items
+  ]
+}
+
+Menu Items Available:
+1. Zinger Burger (650 PKR) - Burgers
+2. Chicken Bucket (1800 PKR) - Buckets
+3. Krunch Burger (350 PKR) - Burgers
+4. Hot Wings (550 PKR) - Wings
+5. Chicken Nuggets (450 PKR) - Snacks
+6. Mighty Zinger (750 PKR) - Burgers
+7. Family Feast (2500 PKR) - Deals
+8. Twister (550 PKR) - Wraps
+
+-------------------------------------------
+4.2 Order Endpoints
+-------------------------------------------
+
+POST /orders/
+Description: Create a new order
+Request Body: {
+  "customer_name": "John Doe",
+  "phone_number": "+923001234567",
+  "address": "123 Main Street, Karachi",
+  "landmark": "Near City Mall",
+  "items": [
+    {"id": 1, "name": "Zinger Burger", "quantity": 2, "price": 650},
+    {"id": 4, "name": "Hot Wings", "quantity": 1, "price": 550}
+  ],
+  "total_price": 1850
+}
+
+Response (201 Created): {
+  "success": true,
+  "message": "Order created successfully",
+  "order": { ... order data ... }
+}
+
+Response (400 Bad Request): {
+  "success": false,
+  "errors": { ... validation errors ... }
+}
+
+-------------------------------------------
+4.3 ElevenLabs Call Endpoints (INCOMPLETE IN URLs)
+-------------------------------------------
+
+NOTE: These endpoints are defined in views.py but NOT added to menu/urls.py yet!
+They need to be added to make them accessible.
+
+POST /calls/initiate/ (NOT YET ROUTED)
+Description: Initiate an outbound phone call using ElevenLabs
+Request Body: {
+  "order_id": 123,  // optional
+  "phone_number": "+923001234567",
+  "context": {  // optional
+    "order_details": "2x Zinger Burger, 1x Hot Wings"
+  }
+}
+
+Response (201 Created): {
+  "success": true,
+  "message": "Phone call initiated successfully",
+  "data": {
+    "conversation_id": "conv_abc123",
+    "status": "initiated",
+    "phone_number": "+923001234567",
+    "call_id": 1
+  }
+}
+
+POST /calls/chat-token/ (NOT YET ROUTED)
+Description: Generate signed token for browser-based voice chat
+Request Body: {
+  "user_context": {  // optional
+    "customer_name": "John",
+    "cart": [...]
+  }
+}
+
+Response (200 OK): {
+  "success": true,
+  "message": "Chat token generated successfully",
+  "data": {
+    "signed_url": "https://...",
+    "agent_id": "agent_...",
+    "expires_at": "2026-02-16T...",
+    "conversation_id": "uuid-...",
+    "call_id": 2
+  }
+}
+
+POST /calls/webhook/ (NOT YET ROUTED)
+Description: Webhook handler for ElevenLabs call status updates
+Request Body (from ElevenLabs): {
+  "conversation_id": "conv_abc123",
+  "status": "completed",
+  "transcript": "Full conversation transcript...",
+  "duration": 123
+}
+
+Response (200 OK): {
+  "success": true,
+  "message": "Webhook processed successfully"
+}
+
+GET /calls/status/<conversation_id>/ (NOT YET ROUTED)
+Description: Get the status of a specific call
+Response (200 OK): {
+  "success": true,
+  "message": "Call status retrieved successfully",
+  "data": {
+    "id": 1,
+    "order": 123,
+    "phone_number": "+923001234567",
+    "call_type": "outbound",
+    "conversation_id": "conv_abc123",
+    "status": "completed",
+    "transcript": "...",
+    "duration_seconds": 123,
+    "metadata": {...},
+    "created_at": "2026-02-16T...",
+    "updated_at": "2026-02-16T..."
+  }
+}
+
+===========================================
+5. ELEVENLABS INTEGRATION
+===========================================
+
+-------------------------------------------
+5.1 Configuration (kfc_api/settings.py)
+-------------------------------------------
+
+Environment Variables (from .env):
+- ELEVENLABS_API_KEY: sk_823c360cccc7f6f148812afd12aa817e574a61fb4457527a
+- ELEVENLABS_AGENT_ID: agent_2101khkbqtftehgsbkdew9s611ra
+
+Settings:
+- ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY')
+- ELEVENLABS_AGENT_ID = os.getenv('ELEVENLABS_AGENT_ID')
+
+CORS Configuration:
+- CORS_ALLOW_ALL_ORIGINS = True (for development)
+- CORS_ALLOW_CREDENTIALS = True
+
+CSRF Configuration:
+- CSRF_TRUSTED_ORIGINS includes https://*.elevenlabs.io
+
+-------------------------------------------
+5.2 ElevenLabsService Class
+-------------------------------------------
+
+Location: menu/services/elevenlabs_service.py
+
+Methods:
+
+1. __init__(self)
+   - Initializes ElevenLabs client with API key
+   - Sets agent_id from settings
+
+2. initiate_phone_call(phone_number, context_data=None)
+   - Initiates outbound phone call to customer
+   - Uses: client.conversational_ai.create_agent_call()
+   - Parameters:
+     * phone_number: str (e.g., '+923001234567')
+     * context_data: dict (optional metadata)
+   - Returns:
+     * success: bool
+     * conversation_id: str
+     * status: str
+     * phone_number: str
+     * error: str (if failed)
+
+3. get_signed_token_for_chat(user_context=None)
+   - Generates signed token for browser voice chat
+   - Uses: client.conversational_ai.create_signed_url()
+   - Parameters:
+     * user_context: dict (optional metadata)
+   - Returns:
+     * success: bool
+     * signed_url: str
+     * agent_id: str
+     * expires_at: str
+     * error: str (if failed)
+
+4. get_conversation_status(conversation_id)
+   - Retrieves status of a conversation
+   - Uses: client.conversational_ai.get_conversation()
+   - Parameters:
+     * conversation_id: str
+   - Returns:
+     * success: bool
+     * conversation_id: str
+     * status: str
+     * transcript: str (optional)
+     * duration_seconds: int (optional)
+     * error: str (if failed)
+
+-------------------------------------------
+5.3 Integration Flow
+-------------------------------------------
+
+Outbound Phone Call Flow:
+1. Frontend/User calls POST /calls/initiate/
+2. Backend validates request (InitiateCallSerializer)
+3. ElevenLabsService.initiate_phone_call() called
+4. ElevenLabs API creates agent call
+5. Call record created in database
+6. conversation_id returned to frontend
+7. ElevenLabs makes actual phone call
+8. Webhooks update call status (POST /calls/webhook/)
+9. Frontend polls GET /calls/status/<conversation_id>/
+
+Browser Chat Flow:
+1. Frontend calls POST /calls/chat-token/
+2. Backend validates request (ChatTokenSerializer)
+3. ElevenLabsService.get_signed_token_for_chat() called
+4. ElevenLabs API generates signed URL
+5. Call record created in database (browser type)
+6. signed_url returned to frontend
+7. Frontend uses ElevenLabs Web SDK with signed URL
+8. User interacts with voice AI in browser
+9. Webhooks update call status
+
+===========================================
+6. SERIALIZERS
+===========================================
+
+Location: menu/serializers.py
+
+1. OrderSerializer
+   - ModelSerializer for Order model
+   - fields = "__all__"
+   - Used for: Creating and retrieving orders
+
+2. CallSerializer
+   - ModelSerializer for Call model
+   - fields = "__all__"
+   - Used for: Retrieving call data
+
+3. InitiateCallSerializer
+   - Serializer for phone call initiation
+   - Fields:
+     * order_id: IntegerField (optional)
+     * phone_number: CharField(max_length=50)
+     * context: JSONField (optional)
+
+4. ChatTokenSerializer
+   - Serializer for browser chat token generation
+   - Fields:
+     * user_context: JSONField (optional)
+
+===========================================
+7. DEPENDENCIES
+===========================================
+
+From requirements.txt:
+
+Django>=4.2.0                  # Web framework
+djangorestframework>=3.14.0    # REST API framework
+django-cors-headers>=4.3.0     # CORS support
+elevenlabs>=1.0.0              # ElevenLabs AI SDK
+python-dotenv>=1.0.0           # Environment variable management
+
+Installation:
+pip install -r requirements.txt
+
+===========================================
+8. DJANGO SETTINGS HIGHLIGHTS
+===========================================
+
+Location: kfc_api/settings.py
+
+DEBUG = True
+ALLOWED_HOSTS = ['*']  # For development
+
+INSTALLED_APPS:
+- django.contrib.admin
+- django.contrib.auth
+- django.contrib.contenttypes
+- django.contrib.sessions
+- django.contrib.messages
+- django.contrib.staticfiles
+- corsheaders
+- rest_framework
+- menu
+
+MIDDLEWARE:
+- corsheaders.middleware.CorsMiddleware (first)
+- Standard Django middleware
+
+DATABASE:
+- Engine: django.db.backends.sqlite3
+- Name: db.sqlite3
+
+REST_FRAMEWORK:
+- DEFAULT_AUTHENTICATION_CLASSES: [] (no auth required)
+- DEFAULT_PERMISSION_CLASSES: [] (no permissions required)
+
+===========================================
+9. URL ROUTING
+===========================================
+
+Main URLs (kfc_api/urls.py):
+- /admin/ → Django admin
+- / → includes menu.urls
+
+Menu URLs (menu/urls.py):
+- /menu/ → GET menu items
+- /orders/ → POST create order
+
+MISSING URLs (need to be added to menu/urls.py):
+- /calls/initiate/ → initiate_call view
+- /calls/chat-token/ → get_chat_token view
+- /calls/webhook/ → elevenlabs_webhook view
+- /calls/status/<conversation_id>/ → call_status view
+
+===========================================
+10. DJANGO ADMIN
+===========================================
+
+Location: menu/admin.py
+
+Registered Models:
+- Order (accessible at /admin/)
+
+NOT Registered Yet:
+- Call model (should be added)
+
+Admin Access:
+- Need to create superuser: python manage.py createsuperuser
+
+===========================================
+11. FRONTEND INTEGRATION (NOT PRESENT)
+===========================================
+
+Current Status:
+- No frontend files in project directory
+- API is backend-only (Django REST API)
+- Frontend expected to be separate application
+
+Expected Frontend Stack:
+- Could be React, Vue, Next.js, or vanilla HTML/JS
+- Would use ElevenLabs Web SDK for browser voice chat
+- Would make HTTP requests to Django API endpoints
+
+Frontend Integration Points:
+1. Menu Display: GET /menu/
+2. Order Creation: POST /orders/
+3. Browser Voice Chat:
+   - Get token: POST /calls/chat-token/
+   - Use signed_url with ElevenLabs Web SDK
+4. Phone Call Initiation: POST /calls/initiate/
+5. Call Status Tracking: GET /calls/status/<conversation_id>/
+
+===========================================
+12. IMPORTANT NOTES & ISSUES
+===========================================
+
+1. MISSING URL ROUTES:
+   - All ElevenLabs call-related endpoints are coded in views.py
+   - BUT they are not added to menu/urls.py
+   - Action Required: Add URL patterns for call endpoints
+
+2. SECURITY CONCERNS:
+   - DEBUG = True (should be False in production)
+   - SECRET_KEY is exposed in settings.py (should use .env)
+   - ALLOWED_HOSTS = ['*'] (should be specific hosts)
+   - .env file contains API keys (ensure it's in .gitignore)
+   - CORS_ALLOW_ALL_ORIGINS = True (should be specific origins)
+
+3. ADMIN REGISTRATION:
+   - Call model not registered in admin.py
+   - Action Required: Add admin.site.register(Call)
+
+4. MIGRATIONS:
+   - Only 0001_initial.py exists
+   - Ensure all models are migrated
+
+5. DATABASE:
+   - Using SQLite (fine for development)
+   - Consider PostgreSQL/MySQL for production
+
+6. ERROR HANDLING:
+   - Basic error handling in ElevenLabsService
+   - Could use more comprehensive logging
+   - Consider adding retry logic for API calls
+
+7. TESTING:
+   - tests.py exists but appears empty
+   - Action Required: Add unit tests
+
+8. WEBHOOK SECURITY:
+   - elevenlabs_webhook endpoint has no authentication
+   - Consider adding signature verification
+
+9. ENVIRONMENT VARIABLES:
+   - .env file is present (good)
+   - Ensure it's in .gitignore
+   - SECRET_KEY should also be in .env
+
+10. API DOCUMENTATION:
+    - No Swagger/OpenAPI documentation
+    - Consider adding DRF spectacular or similar
+
+===========================================
+13. HOW TO RUN THE PROJECT
+===========================================
+
+1. Setup Virtual Environment:
+   python -m venv venv
+   venv\Scripts\activate  # Windows
+   source venv/bin/activate  # Linux/Mac
+
+2. Install Dependencies:
+   pip install -r requirements.txt
+
+3. Setup Environment Variables:
+   - Create/update .env file with:
+     ELEVENLABS_API_KEY=your_key_here
+     ELEVENLABS_AGENT_ID=your_agent_id_here
+
+4. Run Migrations:
+   python manage.py makemigrations
+   python manage.py migrate
+
+5. Create Superuser (optional):
+   python manage.py createsuperuser
+
+6. Run Development Server:
+   python manage.py runserver
+
+7. Access:
+   - API: http://localhost:8000/
+   - Admin: http://localhost:8000/admin/
+   - Menu: http://localhost:8000/menu/
+   - Orders: http://localhost:8000/orders/
+
+===========================================
+14. COMMON DEVELOPMENT TASKS
+===========================================
+
+Create New Migration:
+python manage.py makemigrations
+
+Apply Migrations:
+python manage.py migrate
+
+Run Tests:
+python manage.py test
+
+Create Superuser:
+python manage.py createsuperuser
+
+Shell Access:
+python manage.py shell
+
+Check for Issues:
+python manage.py check
+
+Collect Static Files (production):
+python manage.py collectstatic
+
+===========================================
+15. ELEVENLABS CONVERSATIONAL AI DETAILS
+===========================================
+
+Agent Configuration:
+- Agent ID: agent_2101khkbqtftehgsbkdew9s611ra
+- API Key: Stored in .env file
+
+Capabilities:
+1. Outbound Phone Calls
+   - System initiates calls to customers
+   - AI agent converses about orders/menu
+   - Collects order information via voice
+
+2. Inbound Phone Calls (not implemented yet)
+   - Customers call a number
+   - AI agent answers and assists
+
+3. Browser Voice Chat
+   - Web-based voice interaction
+   - No phone required
+   - Real-time conversation in browser
+
+Conversation Flow:
+1. User engages (phone/browser)
+2. ElevenLabs AI agent responds using configured voice/personality
+3. Conversation captured with transcript
+4. System stores call record with metadata
+5. Status updates via webhooks
+6. Transcripts available after call completion
+
+===========================================
+16. DATA MODELS RELATIONSHIPS
+===========================================
+
+Order ←─ (One-to-Many) ─→ Call
+
+Relationship Details:
+- One Order can have multiple Calls
+- Each Call can optionally belong to one Order
+- Call.order is nullable (not all calls are order-related)
+- Access calls from order: order.calls.all()
+- Access order from call: call.order
+
+Use Cases:
+1. Order-Related Calls:
+   - Confirmation calls after order placement
+   - Delivery status updates
+   - Customer support calls about specific order
+
+2. Non-Order Calls:
+   - General inquiries about menu
+   - Pre-order conversations
+   - Browse menu via voice
+
+===========================================
+17. NEXT STEPS / TODO
+===========================================
+
+High Priority:
+1. Add call endpoints to menu/urls.py
+2. Register Call model in admin.py
+3. Add SECRET_KEY to .env file
+4. Test ElevenLabs integration end-to-end
+5. Configure webhook signature verification
+
+Medium Priority:
+6. Write unit tests
+7. Add API documentation (Swagger/OpenAPI)
+8. Implement proper logging
+9. Set up production-ready settings
+10. Add pagination to endpoints
+
+Low Priority:
+11. Create frontend application
+12. Add user authentication
+13. Implement inbound call handling
+14. Add order status tracking
+15. Create dashboard for call analytics
+
+===========================================
+END OF PROJECT CONTEXT
+===========================================
+
+This document contains comprehensive information about the KFC API project.
+Read this file at the start of each session for complete project context.
+
+Last Updated: 2026-02-16

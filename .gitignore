@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.pyc
+
+# Virtual Environment
+venv/
+env/
+.env/
+.venv/
+
+# Environment Variables
+.env
+.env.local
+.env.production
+*.env
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+static_root/
+
+# Migrations (optional — most teams keep these)
+# */migrations/
+
+# Google Credentials
+credentials.json
+service_account.json
+*.json.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+
+# Deployment
+*.pid
+*.sock
+gunicorn.conf.py
+Procfile.local
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Node (if any frontend)
+node_modules/
+npm-debug.log
