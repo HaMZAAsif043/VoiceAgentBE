@@ -15,7 +15,8 @@ import time
 from enum import Enum
 from typing import Optional, Callable
 
-from groq import Groq
+# from groq import Groq
+from google import genai
 from deepgram.core.events import EventType
 from elevenlabs import ElevenLabs, VoiceSettings
 from deepgram import DeepgramClient
@@ -32,7 +33,7 @@ _GREETING_AUDIO_CACHE_LOCK = threading.Lock()
 def _require_voice_settings() -> None:
     missing = [
         setting_name
-        for setting_name in ("GROQ_API_KEY", "ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID", "DEEPGRAM_API_KEY")
+        for setting_name in ("GEMINI_API_KEY", "ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID", "DEEPGRAM_API_KEY")
         if not getattr(settings, setting_name, None)
     ]
     if missing:
@@ -79,13 +80,15 @@ class CallSession:
         self.current_llm_thread: Optional[threading.Thread] = None
         self.last_transcript: str = ""
         self.tool_cache: dict = {}
+        self._stt_audio_started = False
 
         # -- Audio conversion state for glitch-free streaming --
         self.ratecv_state_in = None    # Twilio→Deepgram resampling
         self.ratecv_state_out = None   # ElevenLabs→Twilio resampling
 
         # -- API clients (per-session for thread safety) --
-        self.groq_client = Groq(api_key=settings.GROQ_API_KEY)
+        # self.groq_client = Groq(api_key=settings.GROQ_API_KEY)
+        self.gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
         self.eleven_client = ElevenLabs(api_key=settings.ELEVENLABS_API_KEY)
         self.deepgram_client = DeepgramClient(api_key=settings.DEEPGRAM_API_KEY)
         self.dg_connection = None
@@ -112,6 +115,12 @@ class CallSession:
         4. Respect self.stop_speaking for barge-in
         """
         self.state = State.SPEAKING
+        logger.info(
+            "[Call %s][TTS] Synthesizing response (%d chars): %s",
+            self.call_sid,
+            len(text),
+            text[:120],
+        )
         logger.info("[Call %s][Ali]: %s", self.call_sid, text)
 
         try:
@@ -129,6 +138,7 @@ class CallSession:
                 ),
             )
 
+            sent_audio = False
             for chunk in audio_generator:
                 if self.stop_speaking.is_set():
                     logger.info("[Call %s] Interrupted", self.call_sid)
@@ -147,6 +157,12 @@ class CallSession:
                         self._ws_send_fn(msg), self._loop
                     )
                     future.result(timeout=5)
+                    if not sent_audio:
+                        sent_audio = True
+                        logger.info("[Call %s][TTS] First audio chunk sent to Twilio", self.call_sid)
+
+            if sent_audio and not self.stop_speaking.is_set():
+                logger.info("[Call %s][TTS] Audio playback completed", self.call_sid)
 
         except Exception as e:
             logger.error("[Call %s][TTS Error]: %s", self.call_sid, e)
@@ -211,6 +227,12 @@ class CallSession:
 
     def play_cached_text(self, text: str, cache_key: tuple[str, str]):
         self.state = State.SPEAKING
+        logger.info(
+            "[Call %s][TTS] Playing cached audio (%d chars): %s",
+            self.call_sid,
+            len(text),
+            text[:120],
+        )
 
         try:
             cached_audio = self._get_cached_audio(cache_key, text)
@@ -274,11 +296,14 @@ class CallSession:
                     pass
 
         threading.Thread(target=keepalive, daemon=True).start()
-        logger.info("[Call %s] Deepgram started", self.call_sid)
+        logger.info("[Call %s][STT] Deepgram streaming started", self.call_sid)
 
     def send_audio_to_deepgram(self, pcm_16k: bytes):
         """Send PCM audio to Deepgram for transcription."""
         if self.dg_connection:
+            if not self._stt_audio_started:
+                self._stt_audio_started = True
+                logger.info("[Call %s][STT] First caller audio chunk forwarded to Deepgram", self.call_sid)
             self.dg_connection.send_media(pcm_16k)
 
     def stop_deepgram(self):
@@ -304,7 +329,7 @@ class CallSession:
     # ══════════════════════════════════════════════════════════════════
 
     def _on_dg_open(self, _open_event=None):
-        logger.info("[Call %s] Deepgram connected", self.call_sid)
+        logger.info("[Call %s][STT] Deepgram connected", self.call_sid)
         # Play greeting in a separate thread
         threading.Thread(target=self._greeting_thread, daemon=True).start()
 
@@ -337,10 +362,11 @@ class CallSession:
             return
 
         if not is_final:
+            logger.debug("[Call %s][STT] Partial transcript: %s", self.call_sid, transcript[:120])
             # For phone calls, only act on final transcripts
             return
 
-        logger.info("[Call %s][Caller FINAL]: %s", self.call_sid, transcript)
+        logger.info("[Call %s][STT] Final transcript: %s", self.call_sid, transcript)
 
         # Minimum length filter
         if len(transcript.split()) < 3:
@@ -376,10 +402,10 @@ class CallSession:
         self.current_llm_thread.start()
 
     def _on_dg_error(self, error):
-        logger.error("[Call %s][Deepgram Error]: %s", self.call_sid, error)
+        logger.error("[Call %s][STT Error]: %s", self.call_sid, error)
 
     def _on_dg_close(self, _close_event=None):
-        logger.info("[Call %s] Deepgram closed", self.call_sid)
+        logger.info("[Call %s][STT] Deepgram closed", self.call_sid)
 
     # ══════════════════════════════════════════════════════════════════
     # Cleanup

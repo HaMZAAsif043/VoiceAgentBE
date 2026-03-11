@@ -3,7 +3,7 @@ Reusable voice agent logic, extracted from main2.py.
 
 All functions accept a session object (CallSession) that holds per-call state.
 This module contains constants (SYSTEM_PROMPT, TOOLS, GREETING) and session-aware
-functions (execute_tool, call_groq, get_trimmed_messages, llm_and_speak).
+functions (execute_tool, call_groq, call_gemini, get_trimmed_messages, llm_and_speak).
 
 No PyAudio, no Silero VAD, no module-level globals.
 """
@@ -17,6 +17,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
+
+GEMINI_MODEL = "gemini-2.5-flash"
 
 # ── BACKEND URL ───────────────────────────────────────────────────────
 BACKEND_URL = "http://localhost:8000"
@@ -236,6 +238,7 @@ def execute_tool(session, name: str, args: dict) -> str:
 
 # ══════════════════════════════════════════════════════════════════════
 # GROQ API CALL WITH RETRY
+# Legacy Groq path is kept below for reference and rollback.
 # ══════════════════════════════════════════════════════════════════════
 
 def call_groq(session, messages, use_tools=True, max_retries=3):
@@ -269,6 +272,99 @@ def call_groq(session, messages, use_tools=True, max_retries=3):
             else:
                 raise
     raise Exception("Groq: max retries exceeded (rate limited)")
+
+
+def _deserialize_tool_result(result: str):
+    try:
+        return json.loads(result)
+    except Exception:
+        return {"result": result}
+
+
+def _build_gemini_history(messages):
+    history = []
+
+    for message in messages:
+        role = message.get("role")
+        content = message.get("content")
+
+        if role not in {"user", "assistant"} or not content:
+            continue
+
+        history.append(
+            {
+                "role": "model" if role == "assistant" else "user",
+                "parts": [{"text": content}],
+            }
+        )
+
+    return history
+
+
+def call_gemini(session, transcript: str, system_content: str):
+    def get_schedule() -> dict:
+        """Get the weekly schedule showing which days are open or closed."""
+        return _deserialize_tool_result(execute_tool(session, "get_schedule", {}))
+
+    def get_available_slots(date: str) -> dict:
+        """Get available time slots for a specific date."""
+        return _deserialize_tool_result(
+            execute_tool(session, "get_available_slots", {"date": date})
+        )
+
+    def book_appointment(
+        name: str,
+        phone: str,
+        email: str,
+        date: str,
+        start_time: str,
+        end_time: str,
+        notes: str,
+    ) -> dict:
+        """Book an appointment for a patient."""
+        return _deserialize_tool_result(
+            execute_tool(
+                session,
+                "book_appointment",
+                {
+                    "name": name,
+                    "phone": phone,
+                    "email": email,
+                    "date": date,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "notes": notes,
+                },
+            )
+        )
+
+    prior_messages = session.conversation[:-1] if session.conversation else []
+    history = _build_gemini_history(prior_messages[-10:])
+
+    logger.info(
+        "[Call %s][LLM] Sending transcript to Gemini (%d chars): %s",
+        session.call_sid,
+        len(transcript),
+        transcript[:160],
+    )
+
+    chat = session.gemini_client.chats.create(
+        model=GEMINI_MODEL,
+        history=history,
+        config={
+            "system_instruction": system_content,
+            "tools": [get_schedule, get_available_slots, book_appointment],
+            "automatic_function_calling": {"ignore_call_history": True},
+        },
+    )
+    response = chat.send_message(transcript)
+    logger.info(
+        "[Call %s][LLM] Gemini response received (%d chars): %s",
+        session.call_sid,
+        len(response.text or ""),
+        (response.text or "")[:160],
+    )
+    return response
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -316,39 +412,11 @@ def llm_and_speak(session, transcript: str):
                 logger.info("[Call %s][LLM] Cancelled before API call.", session.call_sid)
                 break
 
-            try:
-                response = call_groq(session, messages)
-            except Exception:
-                raise
-
-            msg = response.choices[0].message
-
-            # ── Tool call requested ──
-            if msg.tool_calls:
-                if msg.content and msg.content.strip() and not session.stop_speaking.is_set():
-                    spoken_filler = msg.content.strip()
-                    session.speak_fn(spoken_filler)
-
-                messages.append(msg)
-
-                for tc in msg.tool_calls:
-                    if session.stop_speaking.is_set():
-                        break
-                    fn_name = tc.function.name
-                    fn_args = json.loads(tc.function.arguments) or {}
-                    logger.info("[Call %s][Tool] Calling: %s(%s)", session.call_sid, fn_name, fn_args)
-                    result = execute_tool(session, fn_name, fn_args)
-                    logger.info("[Call %s][Tool] Result: %s...", session.call_sid, result[:100])
-                    messages.append({
-                        "role":         "tool",
-                        "tool_call_id": tc.id,
-                        "content":      result,
-                    })
-
-                continue
+            # response = call_groq(session, messages)
+            response = call_gemini(session, transcript, SYSTEM_PROMPT.replace("{time}", now))
 
             # ── Normal text response — stream to TTS ──
-            full_text = msg.content or ""
+            full_text = response.text or ""
 
             # Strip leaked function tags
             full_text = re.sub(r'<function=.*?</function>', '', full_text)
@@ -367,6 +435,7 @@ def llm_and_speak(session, transcript: str):
                 logger.debug("[Call %s][Dedup] Stripped repeated filler", session.call_sid)
 
             if full_text.strip():
+                logger.info("[Call %s][LLM] Handing response text to TTS", session.call_sid)
                 buffer = ""
                 for char in full_text:
                     if session.stop_speaking.is_set():
