@@ -25,6 +25,7 @@ def get_signed_url(request):
 
     Request Body (optional):
     {
+        "agent_id": "agent_...",  // optional override for testing/rotation
         "user_context": {
             "customer_name": "John Doe",
             "cart": [...],
@@ -51,19 +52,25 @@ def get_signed_url(request):
     """
     # Extract optional user context from request
     user_context = request.data.get('user_context', {})
+    requested_agent_id = request.data.get('agent_id')
 
     # Initialize ElevenLabs service
     elevenlabs_service = ElevenLabsService()
 
     # Generate signed URL from ElevenLabs API
-    result = elevenlabs_service.get_signed_token_for_chat(user_context)
+    result = elevenlabs_service.get_signed_token_for_chat(
+        user_context=user_context,
+        agent_id=requested_agent_id
+    )
 
     if not result['success']:
+        http_status = result.get('status_code', status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response({
             "success": False,
-            "message": f"Failed to generate signed URL: {result.get('error', 'Unknown error')}",
+            "message": result.get('user_message', f"Failed to generate signed URL: {result.get('error', 'Unknown error')}"),
+            "error_code": result.get('error_code', 'unknown_error'),
             "error": result.get('error', 'Unknown error')
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        }, status=http_status)
 
     # Generate a conversation ID for tracking
     conversation_id = str(uuid.uuid4())

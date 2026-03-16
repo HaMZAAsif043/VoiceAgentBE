@@ -1,12 +1,3 @@
-"""
-Per-call session object that isolates state for each Twilio phone call.
-
-Replaces the module-level globals in main2.py:
-  conversation, state, stop_speaking, llm_lock, pending_transcript,
-  tool_cache, current_llm_thread, last_transcript
-
-One CallSession is created per active phone call and destroyed when the call ends.
-"""
 import asyncio
 import base64
 import threading

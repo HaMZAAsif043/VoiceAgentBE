@@ -61,4 +61,5 @@ celerybeat.pid
 
 # Node (if any frontend)
 node_modules/
-npm-debug.log
+npm-debug.logservice-account.json
+service-account.json

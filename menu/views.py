@@ -189,19 +189,26 @@ def get_chat_token(request):
 
     validated_data = serializer.validated_data
     user_context = validated_data.get('user_context', {})
+    requested_agent_id = request.data.get('agent_id')
 
     # Initialize ElevenLabs service
     elevenlabs = ElevenLabsService()
 
     # Get signed token for chat
-    result = elevenlabs.get_signed_token_for_chat(user_context)
+    result = elevenlabs.get_signed_token_for_chat(
+        user_context=user_context,
+        agent_id=requested_agent_id
+    )
 
     if not result['success']:
+        http_status = result.get('status_code', status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response({
             "success": False,
-            "message": f"Failed to generate chat token: {result.get('error', 'Unknown error')}",
+            "message": result.get('user_message', f"Failed to generate chat token: {result.get('error', 'Unknown error')}"),
+            "error_code": result.get('error_code', 'unknown_error'),
+            "error": result.get('error', 'Unknown error'),
             "data": None
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        }, status=http_status)
 
     # Create a call record for browser chat
     conversation_id = str(uuid.uuid4())
