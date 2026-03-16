@@ -1,7 +1,9 @@
+asgiref==3.11.1
 certifi==2026.2.25
 cffi==2.0.0
 charset-normalizer==3.4.6
 cryptography==46.0.5
+Django==5.2.12
 google-api-core==2.30.0
 google-api-python-client==2.192.0
 google-auth==2.49.1
@@ -16,6 +18,7 @@ pyasn1_modules==0.4.2
 pycparser==3.0
 pyparsing==3.3.2
 requests==2.32.5
+sqlparse==0.5.5
+tzdata==2025.3
 uritemplate==4.2.0
 urllib3==2.6.3
-gunicorn
