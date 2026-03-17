@@ -41,14 +41,17 @@ def _resolve_runtime_path(raw_path: str | None) -> str | None:
     return str(candidate.resolve())
 
 
-google_credentials = _resolve_runtime_path(
-    os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
-)
+raw_google_credentials = os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
 
-if google_credentials:
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials
-elif (BASE_DIR / 'service-account.json').exists():
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str((BASE_DIR / 'service-account.json').resolve())
+# Allow JSON credentials directly in env for platforms like Railway.
+if raw_google_credentials and raw_google_credentials.strip().startswith('{'):
+    os.environ['GOOGLE_SERVICE_ACCOUNT_JSON'] = raw_google_credentials.strip()
+else:
+    google_credentials = _resolve_runtime_path(raw_google_credentials)
+    if google_credentials:
+        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials
+    elif (BASE_DIR / 'service-account.json').exists():
+        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str((BASE_DIR / 'service-account.json').resolve())
 
 
 # Quick-start development settings - unsuitable for production

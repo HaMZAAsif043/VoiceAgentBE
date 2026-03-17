@@ -5,6 +5,7 @@ from googleapiclient.discovery import build
 from datetime import datetime, timedelta
 import pytz
 import os
+import json
 from pathlib import Path
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
@@ -21,16 +22,31 @@ else:
     root_creds = _PROJECT_ROOT / 'service-account.json'
     SERVICE_ACCOUNT_FILE = str(local_creds if local_creds.exists() else root_creds)
 
-CALENDAR_ID = 'hamza.asif0087@gmail.com'  # or 'primary'
+CALENDAR_ID = os.getenv('GOOGLE_CALENDAR_ID', 'hamza.asif0087@gmail.com')  # or 'primary'
 TIMEZONE = 'Asia/Karachi'
 
 
 def get_calendar_service():
     """Build and return Google Calendar service"""
-    creds = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
-        scopes=SCOPES
-    )
+    credentials_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON')
+
+    # Backward compatibility: accept JSON directly in GOOGLE_APPLICATION_CREDENTIALS.
+    if not credentials_json:
+        raw_gac = os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '').strip()
+        if raw_gac.startswith('{'):
+            credentials_json = raw_gac
+
+    if credentials_json:
+        creds = service_account.Credentials.from_service_account_info(
+            json.loads(credentials_json),
+            scopes=SCOPES
+        )
+    else:
+        creds = service_account.Credentials.from_service_account_file(
+            SERVICE_ACCOUNT_FILE,
+            scopes=SCOPES
+        )
+
     return build('calendar', 'v3', credentials=creds)
 
 
