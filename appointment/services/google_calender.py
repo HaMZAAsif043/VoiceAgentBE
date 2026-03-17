@@ -5,10 +5,22 @@ from googleapiclient.discovery import build
 from datetime import datetime, timedelta
 import pytz
 import os
+from pathlib import Path
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
-# Use absolute path relative to this file's location
-SERVICE_ACCOUNT_FILE = os.path.join(os.path.dirname(__file__), 'credentials.json')
+# Resolve credentials from environment first, then fallback to local files.
+_THIS_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _THIS_DIR.parent.parent
+_env_creds = os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
+
+if _env_creds:
+    _creds_path = Path(os.path.expandvars(_env_creds)).expanduser()
+    SERVICE_ACCOUNT_FILE = str(_creds_path if _creds_path.is_absolute() else (_PROJECT_ROOT / _creds_path).resolve())
+else:
+    local_creds = _THIS_DIR / 'credentials.json'
+    root_creds = _PROJECT_ROOT / 'service-account.json'
+    SERVICE_ACCOUNT_FILE = str(local_creds if local_creds.exists() else root_creds)
+
 CALENDAR_ID = 'hamza.asif0087@gmail.com'  # or 'primary'
 TIMEZONE = 'Asia/Karachi'
 

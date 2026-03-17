@@ -12,13 +12,43 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+import sys
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+_IS_FROZEN = getattr(sys, 'frozen', False)
+_RUNTIME_PATH = sys.executable if _IS_FROZEN else __file__
+BASE_DIR = Path(os.path.dirname(os.path.abspath(_RUNTIME_PATH)))
+
+# When running as source code, settings.py lives in kfc_api/kfc_api, so step up once.
+if not _IS_FROZEN:
+    BASE_DIR = BASE_DIR.parent
+
+BASE_DIR = BASE_DIR.resolve()
 
 # Load environment variables from the project .env file.
 load_dotenv(BASE_DIR / '.env')
+
+
+def _resolve_runtime_path(raw_path: str | None) -> str | None:
+    """Resolve absolute paths for local and deployed environments."""
+    if not raw_path:
+        return None
+
+    candidate = Path(os.path.expandvars(raw_path.strip())).expanduser()
+    if not candidate.is_absolute():
+        candidate = BASE_DIR / candidate
+    return str(candidate.resolve())
+
+
+google_credentials = _resolve_runtime_path(
+    os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
+)
+
+if google_credentials:
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_credentials
+elif (BASE_DIR / 'service-account.json').exists():
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str((BASE_DIR / 'service-account.json').resolve())
 
 
 # Quick-start development settings - unsuitable for production

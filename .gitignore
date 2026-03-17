@@ -33,6 +33,8 @@ static_root/
 # Google Credentials
 credentials.json
 service_account.json
+service-account.json
+appointment/services/credentials.json
 *.json.key
 
 # IDE
@@ -61,5 +63,4 @@ celerybeat.pid
 
 # Node (if any frontend)
 node_modules/
-npm-debug.logservice-account.json
-service-account.json
+npm-debug.log
