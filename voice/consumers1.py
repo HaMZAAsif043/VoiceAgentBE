@@ -13,24 +13,37 @@ from dotenv import load_dotenv
 from websockets.exceptions import ConnectionClosed
 
 # ---------------------------------------------------------------------------
-# Load .env FIRST — before any Google SDK code runs, so that
-# GOOGLE_APPLICATION_CREDENTIALS is available for service account auth.
-# ---------------------------------------------------------------------------
+
+# Load .env FIRST — before any Google SDK code runs
 _kfc_api_dir = Path(__file__).resolve().parent.parent  # voice/consumers1.py -> voice -> kfc_api
 _env_file = _kfc_api_dir / ".env"
 load_dotenv(str(_env_file), override=True)
 
-# Resolve GOOGLE_APPLICATION_CREDENTIALS to an absolute path if relative.
-# When Django runs from a different CWD, relative paths won't find the file.
-_creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
-if _creds_path and not os.path.isabs(_creds_path):
-    _abs_creds = str(_kfc_api_dir / _creds_path)
-    if os.path.exists(_abs_creds):
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = _abs_creds
-        logging.getLogger(__name__).info(
-            "Resolved GOOGLE_APPLICATION_CREDENTIALS to: %s", _abs_creds
-        )
-# ---------------------------------------------------------------------------
+# Vertex AI credentials setup (cloud compatible, no file path logic)
+import json
+from google.oauth2 import service_account
+import vertexai
+
+service_account_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+if not service_account_json:
+    raise EnvironmentError("GOOGLE_SERVICE_ACCOUNT_JSON environment variable is not set.")
+try:
+    sa_info = json.loads(service_account_json)
+except json.JSONDecodeError as e:
+    raise ValueError("Invalid JSON in GOOGLE_SERVICE_ACCOUNT_JSON environment variable.") from e
+
+credentials = service_account.Credentials.from_service_account_info(
+    sa_info,
+    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+)
+
+vertex_project = os.environ.get("VERTEX_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT")
+vertex_location = os.environ.get("VERTEX_LOCATION") or os.environ.get("GOOGLE_CLOUD_REGION", "europe-west4")
+vertexai.init(
+    project=vertex_project,
+    location=vertex_location,
+    credentials=credentials,
+)
 
 try:
     from google import genai
