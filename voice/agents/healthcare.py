@@ -185,7 +185,7 @@ get_schedule → get_available_slots → book_appointment
 # Tool definitions
 # ---------------------------------------------------------------------------
 
-BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+BASE_URL = os.getenv("API_BASE_URL", "https://web-production-00424.up.railway.app")
 
 TOOLS = [
     types.Tool(
@@ -252,7 +252,8 @@ TOOLS = [
 
 async def execute_tool(tool_name: str, tool_args: dict) -> dict:
     import aiohttp
-    base = "http://127.0.0.1:8000"
+    base = os.getenv("API_BASE_URL", "https://web-production-00424.up.railway.app")
+
     try:
         async with aiohttp.ClientSession() as http:
             if tool_name == "get_schedule":

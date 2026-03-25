@@ -226,7 +226,8 @@ TOOLS = [
 
 async def execute_tool(tool_name: str, tool_args: dict) -> dict:
     import aiohttp
-    base = "http://127.0.0.1:8000"
+    base = os.getenv("API_BASE_URL", "https://web-production-00424.up.railway.app")
+
     try:
         async with aiohttp.ClientSession() as http:
             if tool_name == "get_restaurant_schedule":
