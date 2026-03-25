@@ -437,23 +437,61 @@ class VoiceAgentConsumer(AsyncWebsocketConsumer):
         pass
 
     # ------------------------------------------------------------------
+    # Override hooks — subclasses implement these for dynamic config
+    # ------------------------------------------------------------------
+
+    def _get_system_prompt(self) -> str:
+        """Return the system prompt string for this session."""
+        from .agents.healthcare import build_system_prompt
+        return build_system_prompt()
+
+    def _get_tools(self):
+        """Return the Gemini TOOLS list for this session."""
+        from .agents.healthcare import TOOLS
+        return TOOLS
+
+    def _get_voice_name(self) -> str:
+        return "Aoede"
+
+    def _get_language_code(self) -> str:
+        return "ur-PK"
+
+    def _get_greeting_path(self):
+        from .agents.healthcare import GREETING_PATH
+        return GREETING_PATH
+
+    def _get_greeting_prompt(self) -> str:
+        from .agents.healthcare import GREETING_PROMPT
+        return GREETING_PROMPT
+
+    async def _execute_tool(self, tool_name: str, tool_args: dict) -> dict:
+        """Execute a tool call. Subclasses override for per-agent routing."""
+        from .agents.healthcare import execute_tool
+        return await execute_tool(tool_name, tool_args)
+
+    # ------------------------------------------------------------------
     # Gemini Live session
     # ------------------------------------------------------------------
 
     async def _run_gemini_session(self):
+        voice_name    = self._get_voice_name()
+        language_code = self._get_language_code()
+        system_prompt = self._get_system_prompt()
+        tools         = self._get_tools()
+
         live_config = types.LiveConnectConfig(
             system_instruction=types.Content(
-                parts=[types.Part(text=_build_system_prompt())]
+                parts=[types.Part(text=system_prompt)]
             ),
             response_modalities=["AUDIO"],
-            tools=TOOLS,
+            tools=tools,
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name=VOICE_NAME
+                        voice_name=voice_name
                     )
                 ),
-                language_code='en-US'
+                language_code=language_code,
             ),
             realtime_input_config=types.RealtimeInputConfig(
                 automatic_activity_detection=types.AutomaticActivityDetection(
@@ -498,18 +536,20 @@ class VoiceAgentConsumer(AsyncWebsocketConsumer):
     # ------------------------------------------------------------------
 
     async def _handle_greeting(self, session):
-        if GREETING_PATH.exists():
-            print(f"[WS] Playing cached greeting from {GREETING_PATH}", flush=True)
-            pcm_data = _load_wav_pcm(GREETING_PATH)
+        greeting_path  = self._get_greeting_path()
+        greeting_prompt = self._get_greeting_prompt()
+
+        if greeting_path.exists():
+            print(f"[WS] Playing cached greeting from {greeting_path}", flush=True)
+            pcm_data = _load_wav_pcm(greeting_path)
             await self._stream_pcm_to_sip(pcm_data)
-            
-            # Important: Tell the model to start natively
+
             print("[WS] Telling model that greeting is cached and to start", flush=True)
             await session.send_client_content(
                 turns=[
                     types.Content(
                         role="user",
-                        parts=[types.Part(text=GREETING_PROMPT)],
+                        parts=[types.Part(text=greeting_prompt)],
                     )
                 ],
                 turn_complete=True,
@@ -521,7 +561,7 @@ class VoiceAgentConsumer(AsyncWebsocketConsumer):
                 turns=[
                     types.Content(
                         role="user",
-                        parts=[types.Part(text=GREETING_PROMPT)],
+                        parts=[types.Part(text=greeting_prompt)],
                     )
                 ],
                 turn_complete=True,

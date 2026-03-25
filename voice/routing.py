@@ -1,4 +1,4 @@
-"""WebSocket URL patterns for Twilio media streams."""
+"""WebSocket URL patterns for voice agents."""
 from django.urls import re_path
 
 from . import consumers
@@ -6,10 +6,11 @@ from . import consumers1
 from voice.consumers_browser import BrowserVoiceConsumer  # Browser FE (PCM16)
 
 websocket_urlpatterns = [
-    re_path(r"^ws/voice/stream/$", consumers.TwilioMediaConsumer.as_asgi()),
-    re_path(r"^ws/voice/voice-agent/$", consumers1.VoiceAgentConsumer.as_asgi()),
-    re_path(r"^ws/voice/voice-agent-browser/$", BrowserVoiceConsumer.as_asgi()),  # FE
+    # Legacy Twilio / SIP routes
+    re_path(r"^ws/voice/stream/$",          consumers.TwilioMediaConsumer.as_asgi()),
+    re_path(r"^ws/voice/voice-agent/$",     consumers1.VoiceAgentConsumer.as_asgi()),
+
+    # Dynamic browser route — agent_id resolved per-connection
+    # e.g. ws://host/ws/voice/healthcare/  or  ws://host/ws/voice/restaurant/
+    re_path(r"^ws/voice/(?P<agent_id>[a-z0-9_-]+)/$", BrowserVoiceConsumer.as_asgi()),
 ]
-
-
-
