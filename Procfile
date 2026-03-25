@@ -1,1 +1,1 @@
-web: gunicorn kfc_api.wsgi:application -- bind 0.0.0.0:8000
+web: daphne -b 0.0.0.0 -p $PORT kfc_api.asgi:application
