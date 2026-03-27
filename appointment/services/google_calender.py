@@ -46,6 +46,10 @@ def create_meeting(appointment):
     start_dt = datetime.combine(appointment.date, appointment.start_time)
     end_dt   = datetime.combine(appointment.date, appointment.end_time)
 
+    # Guard against empty time range (start == end or end < start)
+    if end_dt <= start_dt:
+        end_dt = start_dt + timedelta(minutes=30)
+
     event = {
         'summary': f'Appointment - {appointment.name}',
         'description': appointment.notes or '',
@@ -79,7 +83,7 @@ def create_meeting(appointment):
     result = service.events().insert(
         calendarId=CALENDAR_ID,
         body=event,
-        conferenceDataVersion=0,  # ← change from 1 to 0
+        conferenceDataVersion=1,  # enables Google Meet link creation
         sendUpdates='none',          # sends email invites to attendees
     ).execute()
 
